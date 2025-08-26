@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Shape Detector with MQTT</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/mqttws31.min.js"></script>
+</head>
+<body>
+  <h2>Shape Detector</h2>
+  <button onclick="init('environment')">Start Camera</button>
+  <button onclick="stop()">Stop</button>
+  <div id="webcam-container"></div>
+  <div id="label-container"></div>
+
+  <script>
+    const URL = "https://teachablemachine.withgoogle.com/models/hGmOXhF9c/";
+    let model, webcam, labelContainer, maxPredictions;
+
+    // --- MQTT Setup ---
+    const client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "webClient-" + Math.random());
+    client.connect({
+      onSuccess: () => console.log("Connected to HiveMQ"),
+      onFailure: (err) => console.error(err)
+    });
+
+    async function init(facingMode) {
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+
+      model = await tmImage.load(modelURL, metadataURL);
+      maxPredictions = model.getTotalClasses();
+
+      webcam = new tmImage.Webcam(224, 224, false);
+      await webcam.setup({ facingMode: facingMode });
+      await webcam.play();
+      document.getElementById("webcam-container").appendChild(webcam.canvas);
+
+      labelContainer = document.getElementById("label-container");
+      labelContainer.innerHTML = "";
+      for (let i = 0; i < maxPredictions; i++) {
+        labelContainer.appendChild(document.createElement("div"));
+      }
+
+      window.requestAnimationFrame(loop);
+    }
+
+    async function loop() {
+      webcam.update();
+      await predict();
+      window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+      const prediction = await model.predict(webcam.canvas);
+
+      // แสดงผลบนเว็บ
+      for (let i = 0; i < maxPredictions; i++) {
+        labelContainer.childNodes[i].innerHTML =
+          prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+      }
+
+      // ส่ง class ที่มีความน่าจะเป็นสูงสุดไป MQTT
+      let bestClass = prediction.reduce((a, b) => (a.probability > b.probability ? a : b));
+      const msg = new Paho.MQTT.Message(bestClass.className);
+      msg.destinationName = "esp32/shapes";
+      client.send(msg);
+    }
+
+    function stop() {
+      if (webcam) {
+        webcam.stop();
+        document.getElementById("webcam-container").innerHTML = "";
+        document.getElementById("label-container").innerHTML = "";
+      }
+    }
+  </script>
+</body>
+</html>
