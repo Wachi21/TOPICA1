@@ -15,7 +15,7 @@
   <div id="label-container"></div>
 
   <script>
-    const URL = "https://teachablemachine.withgoogle.com/models/hGmOXhF9c/";
+    const URL = "https://teachablemachine.withgoogle.com/models/OldYqMZCp/";
     let model, webcam, labelContainer, maxPredictions;
 
     // --- MQTT Setup ---
